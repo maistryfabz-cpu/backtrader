@@ -1,0 +1,66 @@
+import backtrader as bt
+
+# === Strategy Class ===
+class ShieldSniperUnified(bt.Strategy):
+    params = (
+        ("ema_length", 50),
+        ("rsi_length", 14),
+        ("macd_fast", 12),
+        ("macd_slow", 26),
+        ("macd_signal", 9),
+    )
+
+    def __init__(self):
+        # Indicators
+        self.ema = bt.indicators.EMA(self.data.close, period=self.p.ema_length)
+        self.rsi = bt.indicators.RSI(self.data.close, period=self.p.rsi_length)
+        self.macd = bt.indicators.MACD(self.data.close,
+                                       period_me1=self.p.macd_fast,
+                                       period_me2=self.p.macd_slow,
+                                       period_signal=self.p.macd_signal)
+
+    def next(self):
+        # Bias filter (H4 approximation using resample)
+        # In Backtrader, you can resample data to H4 and attach indicators
+        # For simplicity, we check EMA/RSI/MACD on current timeframe
+        bull_bias = self.data.close[0] > self.ema[0] and self.rsi[0] > 50 and self.macd.macd[0] > self.macd.signal[0]
+        bear_bias = self.data.close[0] < self.ema[0] and self.rsi[0] < 50 and self.macd.macd[0] < self.macd.signal[0]
+
+        # Entry conditions
+        if bull_bias and self.rsi[0] > 55 and self.macd.macd[0] > self.macd.signal[0]:
+            if not self.position:
+                entry_price = self.data.close[0]
+                sl = entry_price - 25
+                tp1 = entry_price + 50
+                tp2 = entry_price + 100
+                tp3 = entry_price + 150
+                self.buy()
+                print(f"BUY @ {entry_price}, SL={sl}, TP1={tp1}, TP2={tp2}, TP3={tp3}")
+
+        elif bear_bias and self.rsi[0] < 45 and self.macd.macd[0] < self.macd.signal[0]:
+            if not self.position:
+                entry_price = self.data.close[0]
+                sl = entry_price + 25
+                tp1 = entry_price - 50
+                tp2 = entry_price - 100
+                tp3 = entry_price - 150
+                self.sell()
+                print(f"SELL @ {entry_price}, SL={sl}, TP1={tp1}, TP2={tp2}, TP3={tp3}")
+
+# === Run Backtest ===
+if __name__ == "__main__":
+    cerebro = bt.Cerebro()
+    cerebro.addstrategy(ShieldSniperUnified)
+
+    # Load data (example: CSV with Gold prices)
+    data = bt.feeds.GenericCSVData(
+        dataname="XAUUSD_15min.csv",
+        timeframe=bt.TimeFrame.Minutes,
+        compression=15,
+        dtformat="%Y-%m-%d %H:%M:%S",
+        openinterest=-1
+    )
+    cerebro.adddata(data)
+
+    cerebro.run()
+    cerebro.plot()
